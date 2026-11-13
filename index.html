@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Mirmobe Beat Forge</title>
+  <meta name="description" content="Mirmobe Beat Forge is a browser beat maker, multitrack recorder, and add-on studio. Apps, not investments.">
+  <meta name="theme-color" content="#0c0b09">
+  <link rel="icon" href="./favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="./css/studio.css">
+</head>
+<body>
+  <div class="app">
+    <header class="top">
+      <a class="brand" href="./">
+        <svg class="mark" viewBox="0 0 48 48" aria-hidden="true">
+          <rect x="1" y="1" width="46" height="46" rx="12" fill="#1a140e" stroke="#e0a44a" stroke-width="1.5"/>
+          <path d="M10 34 V16 L18 28 L24 16 L30 28 L38 16 V34" fill="none" stroke="#f3d7a1" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round"/>
+          <path d="M12 38 H36" stroke="#e0a44a" stroke-width="2" stroke-linecap="round"/>
+        </svg>
+        <span class="brand-name">
+          <b>Mirmobe</b>
+          <small>Beat Forge</small>
+        </span>
+      </a>
+      <p class="tagline">A step sequencer, a booth, and a bay for add-ons. The whole studio stays in the browser.</p>
+      <div class="top-actions">
+        <span class="badge" id="trialBadge" aria-live="polite">5:00 left</span>
+        <button type="button" class="btn" id="openPaywallBtn">Unlock 0.05 SOL</button>
+      </div>
+    </header>
+
+    <main class="studio">
+      <section class="deck" aria-label="Sequencer">
+        <div class="transport">
+          <button type="button" class="btn primary" id="playBtn" aria-pressed="false">Play</button>
+          <button type="button" class="btn" id="stopBtn">Stop</button>
+          <p class="transport-readout"><span id="transportState">Stopped</span> <span id="stepReadout">–</span></p>
+          <label class="field compact">BPM
+            <input id="bpmInput" type="number" min="60" max="180" step="1" value="96">
+          </label>
+          <label class="field compact">Swing
+            <input id="swingInput" type="range" min="0" max="0.45" step="0.01" value="0.18">
+            <span id="swingReadout">18%</span>
+          </label>
+          <button type="button" class="btn" id="tapTempoBtn">Tap</button>
+          <label class="check"><input id="countInToggle" type="checkbox"> Count-in</label>
+          <label class="check"><input id="metronomeToggle" type="checkbox"> Metronome</label>
+          <button type="button" class="btn" id="stepsToggle">16 steps</button>
+          <label class="field compact">Key
+            <select id="keySelect"></select>
+          </label>
+          <label class="field compact">Scale
+            <select id="scaleSelect">
+              <option value="minor">Minor</option>
+              <option value="major">Major</option>
+              <option value="dorian">Dorian</option>
+              <option value="pentatonic">Pentatonic</option>
+            </select>
+          </label>
+          <div class="banks" role="group" aria-label="Pattern bank">
+            <button type="button" data-bank="A" id="bankA">A</button>
+            <button type="button" data-bank="B" id="bankB">B</button>
+            <button type="button" data-bank="C" id="bankC">C</button>
+            <button type="button" data-bank="D" id="bankD">D</button>
+          </div>
+          <label class="field grow">Project
+            <input id="projectName" type="text" value="Untitled Forge" maxlength="60">
+          </label>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head">
+            <h2>Pattern</h2>
+            <p>Click drums to toggle. Click bass and chords to walk the scale. Shift-click clears a note.</p>
+          </div>
+          <div id="grid" class="grid" aria-label="Step grid"></div>
+        </div>
+
+        <form class="forge-bar" id="forgeForm" onsubmit="return false">
+          <label class="field grow">Describe a beat
+            <input id="aiPrompt" type="text" maxlength="240" placeholder="dark trap 140 bpm in F minor">
+          </label>
+          <button type="button" class="btn primary" id="generateBeatBtn">Forge beat</button>
+          <p class="hint" id="aiStatus" role="status">Local theory is always on. Pollinations is used when it answers.</p>
+        </form>
+
+        <section class="panel" aria-label="Audio tracks">
+          <div class="panel-head">
+            <h2>Audio tracks</h2>
+            <div class="row-actions">
+              <button type="button" class="btn" id="recordBtn" aria-pressed="false">Record</button>
+              <button type="button" class="btn" id="importAudioBtn">Import</button>
+              <button type="button" class="btn" id="demoTrackBtn">Demo loop</button>
+              <input id="audioFile" type="file" accept="audio/wav,audio/mpeg,audio/ogg,audio/webm,.wav,.mp3,.ogg,.webm" hidden>
+            </div>
+          </div>
+          <div class="record-tools">
+            <label class="field compact">Latency offset
+              <input id="latencyMs" type="range" min="-100" max="150" step="1" value="0">
+            </label>
+            <div class="meter" id="inputMeter" aria-hidden="true"><span id="inputMeterBar"></span></div>
+          </div>
+          <div id="trackList"></div>
+        </section>
+
+        <section class="panel viz-panel" aria-label="Master visualizer">
+          <div class="panel-head">
+            <h2>Master</h2>
+            <p id="bounceStatus" role="status">Export bounces the sequencer, synths, and audio tracks.</p>
+          </div>
+          <canvas id="viz" width="800" height="84" aria-label="Spectrum and waveform"></canvas>
+          <div class="bounce-bar">
+            <button type="button" class="btn primary" id="exportWavBtn" data-gated>Export WAV</button>
+            <label class="field compact">Bars
+              <select id="exportBars">
+                <option value="2">2</option>
+                <option value="4" selected>4</option>
+                <option value="8">8</option>
+              </select>
+            </label>
+            <button type="button" class="btn" id="saveProjectBtn">Save JSON</button>
+            <button type="button" class="btn" id="loadProjectBtn">Load JSON</button>
+            <input id="loadProject" type="file" accept="application/json,.json" hidden>
+          </div>
+        </section>
+      </section>
+
+      <aside class="rack" id="rack">
+        <div class="tabs" role="tablist">
+          <button type="button" id="tabMixer" class="is-on" role="tab" aria-selected="true">Mixer</button>
+          <button type="button" id="tabAddons" role="tab" aria-selected="false">Add-ons</button>
+        </div>
+
+        <div id="mixerPanel">
+          <div class="master-box">
+            <label class="fader">Glue
+              <input id="glueInput" type="range" min="0" max="1" step="0.01" value="0.42">
+            </label>
+            <label class="fader">Master
+              <input id="masterGain" type="range" min="0" max="1" step="0.01" value="0.88">
+            </label>
+            <label class="fader">Duck
+              <input id="sidechainInput" type="range" min="0" max="1" step="0.01" value="0.28">
+              <span id="sidechainReadout">28%</span>
+            </label>
+          </div>
+          <div class="mix-assist">
+            <button type="button" class="btn primary" id="mixAssistBtn" data-gated>AI Mix &amp; Beat Align</button>
+            <button type="button" class="btn" id="applyMixBtn" data-gated disabled>Apply balance</button>
+            <ul id="mixSuggestions"></ul>
+          </div>
+          <div id="mixerStrips"></div>
+        </div>
+
+        <div id="addonPanel" hidden>
+          <div id="addonToggles" class="addon-toggles"></div>
+          <div id="addonMount"></div>
+          <div id="importedMount"></div>
+          <form class="import-pack" id="addonImportForm">
+            <h3>Custom pack</h3>
+            <p class="hint">JSON packs only. Drop a module into the repo to ship code. Import is part of the full forge.</p>
+            <label class="field">Pack URL
+              <input id="addonUrlInput" type="text" placeholder="./addons/example-pack.json" data-gated>
+            </label>
+            <div class="row-actions">
+              <button type="button" class="btn" id="addonImportUrlBtn" data-gated>Load URL</button>
+              <button type="button" class="btn" id="addonFileBtn" data-gated>Load file</button>
+              <input id="addonFile" type="file" accept="application/json,.json" hidden>
+            </div>
+            <p class="hint" id="addonImportStatus" role="status"></p>
+          </form>
+        </div>
+      </aside>
+    </main>
+
+    <footer>
+      <p>Mirmobe Beat Forge is a creative music tool. Apps, not investments. No offer to buy or sell anything, and no promise about price.</p>
+      <p>
+        <a href="https://mirmobe.wordpress.com" target="_blank" rel="noopener noreferrer">mirmobe.wordpress.com</a>
+        <span aria-hidden="true"> · </span>
+        <a href="https://mirmobe-apps.myshopify.com/" target="_blank" rel="noopener noreferrer">mirmobe-apps.myshopify.com</a>
+      </p>
+    </footer>
+  </div>
+
+  <div id="toast" class="toast" role="status" hidden></div>
+
+  <div class="paywall-overlay" id="paywallOverlay" role="dialog" aria-modal="true" aria-labelledby="paywallTitle" hidden>
+    <div class="paywall-card">
+      <h2 id="paywallTitle">Unlock the full forge</h2>
+      <p class="paywall-kicker" id="paywallKicker">Keep export, mix assist, and custom add-ons</p>
+      <p class="paywall-copy" id="paywallCopy">Pay 0.05 SOL once. Playback of the sequencer stays available either way.</p>
+      <p class="paywall-copy">This pays for the app. Apps, not investments.</p>
+      <div class="pay-amount" id="payAmountHero">0.05 SOL</div>
+      <div class="pay-qr" id="payQr"></div>
+      <div class="pay-address-row">
+        <code id="payAddressDisplay"></code>
+        <button type="button" class="btn" id="copyPayAddressBtn">Copy</button>
+      </div>
+      <p class="hint">Send <strong id="payAmountLabel">0.05 SOL</strong> on Solana mainnet. The signature works once in this browser, the transaction has to succeed, it has to be newer than 7 days, and this address has to gain at least 0.05 SOL.</p>
+      <div class="pay-actions">
+        <a class="btn primary" id="phantomPayLink" href="#">Pay with a Solana wallet</a>
+        <button type="button" class="btn" id="shareBonusBtn">Share for 5 more minutes</button>
+      </div>
+      <div class="verify-box">
+        <label class="field" for="txSigInput">Already paid? Paste the transaction signature</label>
+        <div class="verify-row">
+          <input id="txSigInput" type="text" autocomplete="off" spellcheck="false" placeholder="Signature or explorer link">
+          <button type="button" class="btn primary" id="verifyPayBtn">Verify payment</button>
+        </div>
+        <p class="paywall-status" id="paywallStatus" aria-live="polite"></p>
+      </div>
+      <button type="button" class="btn ghost" id="dismissPaywallBtn">Keep previewing the beat</button>
+    </div>
+  </div>
+
+  <script type="module" src="./js/main.js"></script>
+</body>
+</html>

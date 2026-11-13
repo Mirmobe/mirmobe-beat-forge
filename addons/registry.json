@@ -1,0 +1,36 @@
+{
+  "format": "mirmobe-beat-forge-registry",
+  "version": 1,
+  "addons": [
+    {
+      "id": "trap-forge",
+      "name": "808 & Trap Forge",
+      "version": "1.0.0",
+      "description": "Extra 808 voicings, glides, hat rolls, and trap pattern presets.",
+      "kind": "module",
+      "entry": "./trap-forge.js",
+      "builtin": true,
+      "defaultEnabled": true
+    },
+    {
+      "id": "vocal-fx",
+      "name": "Vocal FX Rack",
+      "version": "1.0.0",
+      "description": "One-click vocal chains: Crisp Studio, Warm Tape, Radio Lo-Fi, and Shimmer Echo.",
+      "kind": "module",
+      "entry": "./vocal-fx.js",
+      "builtin": true,
+      "defaultEnabled": true
+    },
+    {
+      "id": "lyric-pad",
+      "name": "Lyric & Flow Pad",
+      "version": "1.0.0",
+      "description": "Bar-synced lyric notepad and a keyless hook writer with a local rhyme fallback.",
+      "kind": "module",
+      "entry": "./lyric-pad.js",
+      "builtin": true,
+      "defaultEnabled": true
+    }
+  ]
+}
