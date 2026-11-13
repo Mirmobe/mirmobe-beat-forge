@@ -29,7 +29,21 @@ export const state = {
   audioTracks: [],
   lyrics: ['', '', '', ''],
   projectName: 'Untitled Forge',
-  genre: opening.genre
+  genre: opening.genre,
+  io: {
+    directMode: false,
+    channel: 'stereo',
+    inputId: '',
+    outputId: '',
+    inputGain: 1,
+    simulate: false,
+    midiTarget: 'auto',
+    stepRecord: false,
+    clockOut: false,
+    midiOutId: '',
+    mappings: [],
+    writeHead: 0
+  }
 };
 
 const listeners = new Set();

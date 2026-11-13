@@ -3,15 +3,13 @@
 import { state, emit, subscribe, toast } from './state.js';
 import { degreeToMidi, midiToFreq, scaleLength } from './theory.js';
 import { ensureContext, ensureTrackStrip, play } from './engine.js';
+import { isSimulatedInput, openInput, stopInputRoute } from './io.js';
 
 let trackSerial = 1;
 let takeSerial = 1;
 let recorder = null;
 let recordStream = null;
 let recordChunks = [];
-let meterAnalyser = null;
-let meterFrame = 0;
-let meterSource = null;
 
 export function makeDemoBuffer() {
   const rate = 44100;
@@ -121,38 +119,26 @@ export async function importAudioFile(file) {
   return track;
 }
 
-function startMeter() {
-  const bar = document.getElementById('inputMeterBar');
-  const loop = () => {
-    if (!meterAnalyser) return;
-    const bins = new Uint8Array(meterAnalyser.fftSize);
-    meterAnalyser.getByteTimeDomainData(bins);
-    let peak = 0;
-    for (let i = 0; i < bins.length; i += 1) {
-      const value = Math.abs(bins[i] - 128) / 128;
-      if (value > peak) peak = value;
-    }
-    if (bar) bar.style.width = `${Math.min(100, Math.round(peak * 140))}%`;
-    meterFrame = requestAnimationFrame(loop);
-  };
-  meterFrame = requestAnimationFrame(loop);
-}
-
-function stopMeter() {
-  if (meterFrame) cancelAnimationFrame(meterFrame);
-  meterFrame = 0;
-  meterAnalyser = null;
-  if (meterSource) {
-    try { meterSource.disconnect(); } catch (err) { /* already gone */ }
-  }
-  meterSource = null;
-  const bar = document.getElementById('inputMeterBar');
-  if (bar) bar.style.width = '0%';
-}
-
 function releaseStream() {
-  if (recordStream) recordStream.getTracks().forEach((track) => track.stop());
+  stopInputRoute();
   recordStream = null;
+}
+
+function simulatedTakeBuffer() {
+  const rate = 44100;
+  const seconds = Math.max(0.6, (state.steps / 4) * (60 / state.bpm));
+  const channels = state.io.channel === 'stereo' ? 2 : 1;
+  const buffer = new AudioBuffer({ length: Math.floor(seconds * rate), numberOfChannels: channels, sampleRate: rate });
+  const freq = state.io.channel === 'input2' ? 330 : state.io.channel === 'input1' ? 196 : 247;
+  for (let channel = 0; channel < channels; channel += 1) {
+    const data = buffer.getChannelData(channel);
+    for (let i = 0; i < data.length; i += 1) {
+      const t = i / rate;
+      const env = Math.min(1, t / 0.02) * (0.65 + 0.35 * Math.sin(2 * Math.PI * 2 * t));
+      data[i] = Math.sin(2 * Math.PI * freq * t) * 0.28 * env;
+    }
+  }
+  return buffer;
 }
 
 async function beginRecorder() {
@@ -166,7 +152,6 @@ async function beginRecorder() {
   recorder.onstop = async () => {
     const blob = new Blob(recordChunks, { type: recorder.mimeType || 'audio/webm' });
     releaseStream();
-    stopMeter();
     state.recording = false;
     emit('transport');
     try {
@@ -196,32 +181,39 @@ export async function toggleRecording() {
     recorder.stop();
     return;
   }
-  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-    toast('This browser has no microphone API. Use the demo loop instead.');
+  if (isSimulatedInput()) {
+    const latency = Number(document.getElementById('latencyMs')?.value || 0);
+    const channel = state.io.channel === 'input2' ? 'Input 2' : state.io.channel === 'input1' ? 'Input 1' : 'Ch 1-2';
+    const track = addBufferTrack({
+      name: `26c ${channel} sim take`,
+      buffer: simulatedTakeBuffer(),
+      role: 'vocal',
+      nudgeMs: latency,
+      followTempo: false
+    });
+    if (track) toast(`Simulated Studio 26c take on ${channel}. No hardware stream was opened.`);
     return;
   }
+  let opened = null;
   try {
-    recordStream = await navigator.mediaDevices.getUserMedia({
-      audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false }
-    });
+    opened = await openInput();
   } catch (err) {
     toast('Microphone permission was blocked. The demo loop still works.');
     state.recording = false;
     emit('transport');
     return;
   }
-  const context = ensureContext();
-  meterSource = context.createMediaStreamSource(recordStream);
-  meterAnalyser = context.createAnalyser();
-  meterAnalyser.fftSize = 256;
-  meterSource.connect(meterAnalyser);
-  startMeter();
+  if (!opened.stream) {
+    toast('The input did not return a stream. Use the demo loop instead.');
+    if (opened.stop) opened.stop();
+    return;
+  }
+  recordStream = opened.stream;
   if (state.countIn && !state.playing) {
     const off = subscribe((type) => {
       if (type === 'transport' && !state.playing && !state.recording) {
         off();
         releaseStream();
-        stopMeter();
         return;
       }
       if (type === 'step' && state.playing) {

@@ -2,8 +2,14 @@
 // A signature can be used once in this browser. The transaction must have
 // succeeded, be newer than 7 days, and the unlock address must have gained
 // at least 0.05 SOL, including addresses loaded into the transaction.
+//
+// Personal-use mode keeps the verifier intact and skips the countdown,
+// the header timer, and every gate. Set PAYWALL_ENABLED to true to sell
+// the studio again.
 
 import qrcode from './vendor/qrcode.js';
+
+export const PAYWALL_ENABLED = false;
 
 const UNLOCK_PRICE_SOL = 0.05;
 const PAYMENT_ADDRESS = '5P1ArCLapXPjSEaNauVYAmtLKxEwoELcttQvPqmF1VYP';
@@ -52,6 +58,7 @@ export function remainingMs() {
 }
 
 export function hasFullAccess() {
+  if (!PAYWALL_ENABLED) return true;
   return isUnlocked() || remainingMs() > 0;
 }
 
@@ -151,7 +158,7 @@ function tickTrial() {
 }
 
 export function requireFullAccess() {
-  if (hasFullAccess()) return true;
+  if (!PAYWALL_ENABLED || hasFullAccess()) return true;
   dismissedWhileLocked = false;
   showPaywall();
   setPaywallStatus('That part of the forge needs an active sample or the 0.05 SOL unlock.', 'error');
@@ -279,9 +286,31 @@ function drawQr() {
   }
 }
 
+function setPersonalChrome() {
+  const badge = document.getElementById('trialBadge');
+  const open = document.getElementById('openPaywallBtn');
+  const personal = document.getElementById('modeBadge');
+  const overlay = document.getElementById('paywallOverlay');
+  if (badge) badge.hidden = true;
+  if (open) open.hidden = true;
+  if (personal) personal.hidden = false;
+  if (overlay) overlay.hidden = true;
+  document.querySelectorAll('[data-gated]').forEach((node) => node.classList.remove('is-locked'));
+}
+
 export function initPaywall() {
   if (started) return;
   started = true;
+  if (!PAYWALL_ENABLED) {
+    setPersonalChrome();
+    return;
+  }
+  const personal = document.getElementById('modeBadge');
+  const badge = document.getElementById('trialBadge');
+  const open = document.getElementById('openPaywallBtn');
+  if (personal) personal.hidden = true;
+  if (badge) badge.hidden = false;
+  if (open) open.hidden = false;
   const amount = `${UNLOCK_PRICE_SOL} SOL`;
   const amountLabel = document.getElementById('payAmountLabel');
   const amountHero = document.getElementById('payAmountHero');
