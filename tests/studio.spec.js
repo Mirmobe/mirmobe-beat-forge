@@ -14,7 +14,7 @@ test.beforeAll(() => {
   fs.mkdirSync(ARTIFACTS, { recursive: true });
 });
 
-test('studio plays, forges, mixes, exports, and shows the paywall', async ({ page }) => {
+test('personal studio plays in rainbow, routes a simulated 26c, and exports', async ({ page }) => {
   const errors = [];
   watchErrors(page, errors);
 
@@ -22,17 +22,29 @@ test('studio plays, forges, mixes, exports, and shows the paywall', async ({ pag
   await expect(page).toHaveTitle(/Mirmobe Beat Forge/);
   await expect(page.locator('footer')).toContainText('Mirmobe Beat Forge is a creative music tool. Apps, not investments. No offer to buy or sell anything, and no promise about price.');
   await expect(page.locator('footer a[href="https://mirmobe.wordpress.com"]')).toBeVisible();
-  await expect(page.locator('footer a[href="https://mirmobe-apps.myshopify.com/"]')).toBeVisible();
+  await expect(page.locator('#modeBadge')).toHaveText(/Personal studio/);
+  await expect(page.locator('#trialBadge')).toBeHidden();
+  await expect(page.locator('#openPaywallBtn')).toBeHidden();
+  await expect(page.locator('#paywallOverlay')).toBeHidden();
+  const unlocked = await page.evaluate(() => ({
+    paywall: window.MirmobeBeatForge.PAYWALL_ENABLED,
+    access: window.MirmobeBeatForge.hasFullAccess(),
+    kick: getComputedStyle(document.documentElement).getPropertyValue('--c-kick').trim(),
+    bass: getComputedStyle(document.documentElement).getPropertyValue('--c-bass').trim(),
+    chords: getComputedStyle(document.documentElement).getPropertyValue('--c-chords').trim()
+  }));
+  expect(unlocked.paywall).toBe(false);
+  expect(unlocked.access).toBe(true);
+  expect(unlocked.kick).toBe('#ff2d55');
+  expect(unlocked.bass).toBe('#4d7dff');
+  expect(unlocked.chords).toBe('#c084fc');
   await page.waitForSelector('[data-preset="atlanta-slide"]', { state: 'attached' });
 
-  await page.screenshot({ path: `${ARTIFACTS}/desktop-studio.png` });
-
   await page.click('#playBtn');
-  await page.waitForFunction(() => {
-    const text = document.querySelector('#stepReadout').textContent;
-    return text && text !== '–';
-  });
+  await page.waitForFunction(() => document.querySelector('#stepReadout').textContent !== '–');
   await expect(page.locator('#transportState')).toHaveText('Playing');
+  await page.waitForFunction(() => document.querySelectorAll('.track-row.is-hot, .strip.is-hot, .lamp.is-hot').length >= 2);
+  await page.screenshot({ path: `${ARTIFACTS}/rainbow-playback.png` });
   await page.click('#stopBtn');
   await expect(page.locator('#transportState')).toHaveText('Stopped');
 
@@ -55,12 +67,6 @@ test('studio plays, forges, mixes, exports, and shows the paywall', async ({ pag
   await page.fill('#addonUrlInput', './addons/example-pack.json');
   await page.click('#addonImportUrlBtn');
   await expect(page.locator('#importedMount')).toContainText('Night Market');
-  await page.evaluate(() => {
-    window.scrollTo(0, 0);
-    const rack = document.getElementById('rack');
-    if (rack) rack.scrollTop = 0;
-  });
-  await page.screenshot({ path: `${ARTIFACTS}/mixer-addons.png` });
 
   await page.click('#demoTrackBtn');
   await expect(page.locator('.audio-track')).toHaveCount(1);
@@ -89,39 +95,76 @@ test('studio plays, forges, mixes, exports, and shows the paywall', async ({ pag
   const summary = await page.evaluate(() => window.MirmobeBeatForge.lastExport);
   expect(summary.riff).toBe('RIFF');
   expect(summary.peak).toBeGreaterThan(0.01);
-
-  await page.click('#openPaywallBtn');
-  await expect(page.locator('#paywallOverlay')).toBeVisible();
-  await expect(page.locator('#payAddressDisplay')).toHaveText('5P1ArCLapXPjSEaNauVYAmtLKxEwoELcttQvPqmF1VYP');
-  await expect(page.locator('#payAmountHero')).toHaveText('0.05 SOL');
-  await page.screenshot({ path: `${ARTIFACTS}/paywall.png` });
-  await page.click('#dismissPaywallBtn');
   await expect(page.locator('#paywallOverlay')).toBeHidden();
 
+  await page.click('#openIoBtn');
+  await expect(page.locator('#ioOverlay')).toBeVisible();
+  await expect(page.locator('#ioPermissionNote')).toContainText(/only when you click/i);
+  await page.click('#simulate26c');
+  await expect(page.locator('#gearBadge')).toHaveText('PreSonus 26c Ready');
+  await expect(page.locator('#ioCallout')).toContainText(/Studio 26c/);
+  await expect(page.locator('#ioInput')).toContainText('Mic/Inst 1-2');
+  await expect(page.locator('#ioOutput')).toContainText('Line Out 3-4');
+  await expect(page.locator('#directMode')).toBeChecked();
+  await page.selectOption('#ioChannel', 'input1');
+  await expect(page.locator('#routeSummary')).toContainText('Input 1');
+  await expect(page.locator('#routeSummary')).toContainText(/echo cancellation/i);
+  await page.selectOption('#ioOutput', 'sim-26c-out-line');
+  await expect(page.locator('#sinkNote')).toContainText(/setSinkId|system sound/i);
+  await expect(page.locator('#midiInputs')).toContainText('PreSonus Studio 26c MIDI In');
+  await page.click('#midiLearnBtn');
+  await page.click('#learnMaster');
+  await expect(page.locator('#midiLearnStatus')).toContainText(/master/i);
+  await page.click('#sendTestCc');
+  await expect(page.locator('#midiMonitor')).toContainText(/CC 7/);
+  await expect(page.locator('#midiMapList')).toContainText('CC 7 → master');
+  const gain = Number(await page.locator('#masterGain').inputValue());
+  expect(gain).toBeCloseTo(100 / 127, 1);
+  await page.click('#sendTestNote');
+  await expect(page.locator('#midiMonitor')).toContainText(/Note On/);
+  await page.click('#monitorInputBtn');
+  await page.waitForFunction(() => {
+    const text = document.querySelector('#dbReadout').textContent || '';
+    return /-?\d+\.\d/.test(text);
+  });
+  await page.evaluate(() => {
+    const toast = document.getElementById('toast');
+    if (toast) toast.hidden = true;
+    const card = document.querySelector('.io-card');
+    if (card) card.scrollTop = 0;
+  });
+  await page.screenshot({ path: `${ARTIFACTS}/studio-26c-io.png` });
+  await page.click('#closeIoBtn');
+  await expect(page.locator('#ioOverlay')).toBeHidden();
+
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.screenshot({ path: `${ARTIFACTS}/mobile-layout.png`, fullPage: true });
+  await page.screenshot({ path: `${ARTIFACTS}/mobile-rainbow.png`, fullPage: true });
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
   expect(overflow).toBeLessThanOrEqual(1);
 
   expect(errors, errors.join('\n')).toEqual([]);
 });
 
-test('an ended trial still previews playback and gates export', async ({ page }) => {
+test('a stored trial timer does not lock the personal studio', async ({ page }) => {
   const errors = [];
   watchErrors(page, errors);
   await page.addInitScript(() => {
     localStorage.setItem('mbf_v1_used_ms', String(6 * 60 * 1000));
   });
   await page.goto('/');
-  await expect(page.locator('#paywallOverlay')).toBeVisible();
-  await page.click('#dismissPaywallBtn');
+  await expect(page.locator('#paywallOverlay')).toBeHidden();
+  await expect(page.locator('#trialBadge')).toBeHidden();
   await page.click('#playBtn');
   await page.waitForFunction(() => document.querySelector('#stepReadout').textContent !== '–');
   await page.click('#stopBtn');
-  await page.click('#exportWavBtn');
-  await expect(page.locator('#paywallOverlay')).toBeVisible();
-  await page.click('#dismissPaywallBtn');
   await page.click('#mixAssistBtn');
-  await expect(page.locator('#paywallOverlay')).toBeVisible();
+  await expect(page.locator('#paywallOverlay')).toBeHidden();
+  expect(await page.locator('#mixSuggestions li').count()).toBeGreaterThan(0);
+  const downloadPromise = page.waitForEvent('download');
+  await page.click('#exportWavBtn');
+  const download = await downloadPromise;
+  const wav = fs.readFileSync(await download.path());
+  expect(wav.subarray(0, 4).toString('ascii')).toBe('RIFF');
+  await expect(page.locator('#paywallOverlay')).toBeHidden();
   expect(errors, errors.join('\n')).toEqual([]);
 });

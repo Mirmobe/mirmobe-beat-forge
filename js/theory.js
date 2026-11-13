@@ -25,6 +25,22 @@ export const TRACK_LABELS = {
   chords: 'Chords'
 };
 
+export const TRACK_COLORS = {
+  kick: '#ff2d55',
+  snare: '#ff7a2f',
+  clap: '#ffc43d',
+  hat: '#c6ff3a',
+  openhat: '#2ee6c7',
+  perc: '#3ad6ff',
+  bass: '#4d7dff',
+  chords: '#c084fc',
+  vocal: '#ff3db8'
+};
+
+export function trackColor(id) {
+  return TRACK_COLORS[id] || TRACK_COLORS.vocal;
+}
+
 const MAJOR_ROMAN = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII'];
 const MINOR_ROMAN = ['i', 'ii', 'III', 'iv', 'v', 'VI', 'VII'];
 

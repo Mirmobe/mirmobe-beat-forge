@@ -520,13 +520,50 @@ function fireStep(context, target, step, time, mem, live) {
     click(context, target.masterIn, time, step === 0);
   }
   if (live) {
+    const hits = [];
+    DRUM_IDS.forEach((id) => {
+      if ((pattern[id][step] || 0) && audible(state.mixer[id])) hits.push({ id, velocity: id === 'kick' ? 0.95 : 0.75 });
+    });
+    if (bassCell && audible(state.mixer.bass)) hits.push({ id: 'bass', velocity: 0.9 });
+    if (chordCell && audible(state.mixer.chords)) hits.push({ id: 'chords', velocity: 0.8 });
     const delayMs = Math.max(0, (time - context.currentTime) * 1000);
     const handle = window.setTimeout(() => {
       state.currentStep = step;
       emit('step', step);
+      hits.forEach((hit) => emit('hit', hit));
     }, delayMs);
     uiTimers.push(handle);
   }
+}
+
+const DRUM_TRIGGER = {
+  kick: (context, dest, time, velocity) => {
+    triggerKick(context, dest, time, velocity, state.voiceOptions.kick || {});
+    sidechain(graph, time);
+  },
+  snare: (context, dest, time, velocity) => triggerSnare(context, dest, time, velocity),
+  clap: (context, dest, time, velocity) => triggerClap(context, dest, time, velocity, state.voiceOptions.clap || {}),
+  hat: (context, dest, time, velocity) => triggerHat(context, dest, time, velocity, false),
+  openhat: (context, dest, time, velocity) => triggerHat(context, dest, time, velocity, true),
+  perc: (context, dest, time, velocity) => triggerPerc(context, dest, time, velocity)
+};
+
+export function triggerLive(id, velocity = 0.85, midi = null) {
+  const context = ensureContext();
+  if (!graph) return;
+  const strip = graph.strips.get(id);
+  const params = state.mixer[id];
+  if (!strip || !audible(params)) return;
+  const time = context.currentTime + 0.02;
+  const vel = Math.max(0.05, Math.min(1, velocity));
+  const dest = strip.input;
+  if (DRUM_TRIGGER[id]) DRUM_TRIGGER[id](context, dest, time, vel);
+  else if (id === 'bass') triggerBass(context, dest, time, midi || 36, vel, state.voiceOptions.bass || {}, glideMem);
+  else if (id === 'chords') {
+    const tones = midi ? [midi, midi + 4, midi + 7] : chordTones(1, state.key, state.scale, 4);
+    triggerChord(context, dest, time, tones, vel);
+  } else return;
+  emit('hit', { id, velocity: vel });
 }
 
 function scheduler() {

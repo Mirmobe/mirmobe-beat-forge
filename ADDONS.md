@@ -65,8 +65,8 @@ Keep ids stable. Register presets with `group` set to the add-on id so `clearGro
 | `registerVocalChain(chain)` / `clearVocalGroup(group)` / `applyVocalChain(id)` | Chains print onto vocal tracks, or onto every audio track when none are tagged vocal. |
 | `setLyrics(lines)` | Four strings, highlighted with the playhead. |
 | `toast(message)` | One short status line. |
-| `on(event, fn)` | Subscribe to `step`, `transport`, `pattern`, `project`, `tracks`, `lyrics`, or `addons`. Returns an unsubscribe function. |
-| `requestAccess()` | Returns false, and opens the paywall, when the sample has ended and the browser is not unlocked. |
+| `on(event, fn)` | Subscribe to `step`, `hit`, `transport`, `pattern`, `project`, `tracks`, `lyrics`, or `addons`. `hit` is `{ id, velocity }` when a track triggers. Returns an unsubscribe function. |
+| `requestAccess()` | Returns true while `PAYWALL_ENABLED` is false. When that flag is true, returns false and opens the paywall after the sample ends if the browser is not unlocked. |
 
 Pattern lines are 16 or 32 steps. Drums are `0` or `1`. Bass and chords are scale degrees: `0` is a rest, `1`–`7` walk the locked scale (minor, major, dorian, or pentatonic). A 16-step line leaves the second bar empty until the user switches to 32 steps, which copies the first bar when the second bar is blank.
 
@@ -104,7 +104,7 @@ A vocal chain uses the strip that already exists. It does not create Web Audio n
 
 ## JSON packs
 
-Users load a pack from a file or a same-origin (or CORS-enabled) URL. Full WAV export, AI Mix Assist, and this import stay behind the trial or the unlock. Built-in toggles do not.
+Users load a pack from a file or a same-origin (or CORS-enabled) URL. Personal-use mode (`PAYWALL_ENABLED = false` in `js/paywall.js`) leaves WAV export, AI Mix Assist, and this import open. Set the flag to true to put them behind the five-minute sample and the 0.05 SOL unlock again. Built-in toggles stay available either way.
 
 ```json
 {

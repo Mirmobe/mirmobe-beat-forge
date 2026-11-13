@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Mirmobe Beat Forge</title>
   <meta name="description" content="Mirmobe Beat Forge is a browser beat maker, multitrack recorder, and add-on studio. Apps, not investments.">
-  <meta name="theme-color" content="#0c0b09">
+  <meta name="theme-color" content="#07060c">
   <link rel="icon" href="./favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="./css/studio.css">
 </head>
@@ -14,30 +14,40 @@
     <header class="top">
       <a class="brand" href="./">
         <svg class="mark" viewBox="0 0 48 48" aria-hidden="true">
-          <rect x="1" y="1" width="46" height="46" rx="12" fill="#1a140e" stroke="#e0a44a" stroke-width="1.5"/>
-          <path d="M10 34 V16 L18 28 L24 16 L30 28 L38 16 V34" fill="none" stroke="#f3d7a1" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round"/>
-          <path d="M12 38 H36" stroke="#e0a44a" stroke-width="2" stroke-linecap="round"/>
+          <defs>
+            <linearGradient id="brandRainbow" x1="4" y1="44" x2="44" y2="4" gradientUnits="userSpaceOnUse">
+              <stop offset="0" stop-color="#ff2d55"/>
+              <stop offset="0.35" stop-color="#ffc43d"/>
+              <stop offset="0.62" stop-color="#3ad6ff"/>
+              <stop offset="1" stop-color="#c084fc"/>
+            </linearGradient>
+          </defs>
+          <rect x="1" y="1" width="46" height="46" rx="12" fill="#120e18" stroke="url(#brandRainbow)" stroke-width="1.6"/>
+          <path d="M10 34 V16 L18 28 L24 16 L30 28 L38 16 V34" fill="none" stroke="url(#brandRainbow)" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round"/>
+          <path d="M12 38 H36" stroke="url(#brandRainbow)" stroke-width="2" stroke-linecap="round"/>
         </svg>
         <span class="brand-name">
           <b>Mirmobe</b>
           <small>Beat Forge</small>
         </span>
       </a>
-      <p class="tagline">A step sequencer, a booth, and a bay for add-ons. The whole studio stays in the browser.</p>
+      <p class="tagline">A personal step sequencer, booth, and add-on bay. The whole studio stays in the browser.</p>
       <div class="top-actions">
-        <span class="badge" id="trialBadge" aria-live="polite">5:00 left</span>
-        <button type="button" class="btn" id="openPaywallBtn">Unlock 0.05 SOL</button>
+        <span class="badge is-personal" id="modeBadge">Personal studio</span>
+        <button type="button" class="btn" id="openIoBtn">Studio Gear</button>
+        <span class="badge" id="trialBadge" aria-live="polite" hidden>5:00 left</span>
+        <button type="button" class="btn" id="openPaywallBtn" hidden>Unlock 0.05 SOL</button>
       </div>
     </header>
 
     <main class="studio">
       <section class="deck" aria-label="Sequencer">
         <div class="transport">
-          <button type="button" class="btn primary" id="playBtn" aria-pressed="false">Play</button>
-          <button type="button" class="btn" id="stopBtn">Stop</button>
+          <button type="button" class="btn primary" id="playBtn" data-learn="play" aria-pressed="false">Play</button>
+          <button type="button" class="btn" id="stopBtn" data-learn="stop">Stop</button>
           <p class="transport-readout"><span id="transportState">Stopped</span> <span id="stepReadout">–</span></p>
           <label class="field compact">BPM
-            <input id="bpmInput" type="number" min="60" max="180" step="1" value="96">
+            <input id="bpmInput" data-learn="bpm" type="number" min="60" max="180" step="1" value="96">
           </label>
           <label class="field compact">Swing
             <input id="swingInput" type="range" min="0" max="0.45" step="0.01" value="0.18">
@@ -89,7 +99,9 @@
           <div class="panel-head">
             <h2>Audio tracks</h2>
             <div class="row-actions">
-              <button type="button" class="btn" id="recordBtn" aria-pressed="false">Record</button>
+              <button type="button" class="btn" id="recordBtn" data-learn="record" aria-pressed="false">Record</button>
+              <button type="button" class="btn" id="openIoFromTracks">Studio Gear</button>
+              <span class="badge" data-gear-badge id="gearBadgeSide">No interface yet</span>
               <button type="button" class="btn" id="importAudioBtn">Import</button>
               <button type="button" class="btn" id="demoTrackBtn">Demo loop</button>
               <input id="audioFile" type="file" accept="audio/wav,audio/mpeg,audio/ogg,audio/webm,.wav,.mp3,.ogg,.webm" hidden>
@@ -109,7 +121,8 @@
             <h2>Master</h2>
             <p id="bounceStatus" role="status">Export bounces the sequencer, synths, and audio tracks.</p>
           </div>
-          <canvas id="viz" width="800" height="84" aria-label="Spectrum and waveform"></canvas>
+          <div class="lamp-row" id="lampRow" aria-hidden="true"></div>
+          <canvas id="viz" width="800" height="96" aria-label="Spectrum and waveform"></canvas>
           <div class="bounce-bar">
             <button type="button" class="btn primary" id="exportWavBtn" data-gated>Export WAV</button>
             <label class="field compact">Bars
@@ -133,12 +146,13 @@
         </div>
 
         <div id="mixerPanel">
+          <div class="rainbow-rail" aria-hidden="true"></div>
           <div class="master-box">
             <label class="fader">Glue
               <input id="glueInput" type="range" min="0" max="1" step="0.01" value="0.42">
             </label>
             <label class="fader">Master
-              <input id="masterGain" type="range" min="0" max="1" step="0.01" value="0.88">
+              <input id="masterGain" data-learn="master" type="range" min="0" max="1" step="0.01" value="0.88">
             </label>
             <label class="fader">Duck
               <input id="sidechainInput" type="range" min="0" max="1" step="0.01" value="0.28">
@@ -159,7 +173,7 @@
           <div id="importedMount"></div>
           <form class="import-pack" id="addonImportForm">
             <h3>Custom pack</h3>
-            <p class="hint">JSON packs only. Drop a module into the repo to ship code. Import is part of the full forge.</p>
+            <p class="hint">JSON packs only. Drop a module into the repo to ship code. Imports are open in personal-use mode.</p>
             <label class="field">Pack URL
               <input id="addonUrlInput" type="text" placeholder="./addons/example-pack.json" data-gated>
             </label>
@@ -176,7 +190,7 @@
 
     <footer>
       <p>Mirmobe Beat Forge is a creative music tool. Apps, not investments. No offer to buy or sell anything, and no promise about price.</p>
-      <p>
+      <p class="footer-links">Personal studio for now.
         <a href="https://mirmobe.wordpress.com" target="_blank" rel="noopener noreferrer">mirmobe.wordpress.com</a>
         <span aria-hidden="true"> · </span>
         <a href="https://mirmobe-apps.myshopify.com/" target="_blank" rel="noopener noreferrer">mirmobe-apps.myshopify.com</a>
@@ -185,6 +199,117 @@
   </div>
 
   <div id="toast" class="toast" role="status" hidden></div>
+
+  <div class="io-overlay" id="ioOverlay" role="dialog" aria-modal="true" aria-labelledby="ioTitle" hidden>
+    <div class="io-card">
+      <div class="panel-head">
+        <h2 id="ioTitle">Studio Gear &amp; I/O</h2>
+        <button type="button" class="btn" id="closeIoBtn">Close</button>
+      </div>
+      <p class="io-callout" id="ioCallout">Plug in a Studio 26c, or simulate it, to route the XMAX-L inputs and MIDI.</p>
+      <div class="row-actions">
+        <span class="badge" id="gearBadge" data-gear-badge>No interface yet</span>
+        <button type="button" class="btn" id="simulate26c" aria-pressed="false">Simulate PreSonus 26c</button>
+      </div>
+
+      <div class="io-sections">
+      <section class="io-block" aria-label="Audio interface">
+        <h3>Audio interface</h3>
+        <p class="hint" id="ioPermissionNote">Microphone and MIDI access are requested only when you click a connect button. They need HTTPS or localhost, and an allow in the browser. Nothing asks on page load.</p>
+        <div class="row-actions">
+          <button type="button" class="btn" id="refreshDevicesBtn">Refresh devices</button>
+          <button type="button" class="btn" id="allowDevicesBtn">Allow device names</button>
+          <button type="button" class="btn" id="monitorInputBtn" aria-pressed="false">Monitor input</button>
+        </div>
+        <div class="io-grid">
+          <label class="field">Input
+            <select id="ioInput"></select>
+          </label>
+          <label class="field">Output
+            <select id="ioOutput"></select>
+          </label>
+          <label class="field">26c channel
+            <select id="ioChannel">
+              <option value="stereo">Stereo (Ch 1–2)</option>
+              <option value="input1">Input 1 (Mono Left / Mic)</option>
+              <option value="input2">Input 2 (Mono Right / Line-Inst)</option>
+            </select>
+          </label>
+        </div>
+        <label class="check"><input id="directMode" type="checkbox"> Studio / Direct Interface Mode</label>
+        <p class="hint">Direct mode sets echoCancellation, noiseSuppression, and autoGainControl to off so a Studio 26c XMAX-L preamp is not processed by the browser.</p>
+        <label class="field">Input gain trim
+          <input id="inputGain" type="range" min="0" max="2" step="0.01" value="1">
+          <span id="inputGainReadout">1.00×</span>
+        </label>
+        <div class="db-wrap">
+          <div class="db-meter" id="ioMeter" aria-label="Input headroom"><span id="ioMeterFill"></span></div>
+          <p class="db-readout"><span id="dbReadout">-∞</span> dBFS <span class="clip" id="clipLight">Clip</span></p>
+          <button type="button" class="btn" id="resetClipBtn">Reset clip</button>
+        </div>
+        <p class="hint" id="routeSummary">Browser voice processing is on. Stereo (Ch 1–2). Default input → System output.</p>
+        <p class="hint" id="sinkNote"></p>
+      </section>
+
+      <section class="io-block" aria-label="MIDI">
+        <h3>Web MIDI &amp; music apps</h3>
+        <p class="hint" id="midiSupportNote">Connect hardware MIDI from a Studio 26c, ATOM, or FaderPort, and virtual buses from Studio One, Ableton, FL Studio, Logic, IAC Driver, or loopMIDI.</p>
+        <div class="row-actions">
+          <button type="button" class="btn" id="connectMidiBtn">Connect MIDI</button>
+          <button type="button" class="btn" id="midiLearnBtn" aria-pressed="false">MIDI Learn</button>
+          <button type="button" class="btn" id="sendTestNote" disabled>Send test note</button>
+          <button type="button" class="btn" id="sendTestCc" disabled>Send test CC 7</button>
+        </div>
+        <div class="io-grid">
+          <label class="field">Play target
+            <select id="midiTarget">
+              <option value="auto">Auto (drums, 808, chords)</option>
+              <option value="drums">Drum pads</option>
+              <option value="bass">808 / Sub</option>
+              <option value="chords">Chord synth</option>
+            </select>
+          </label>
+          <label class="field">MIDI output
+            <select id="midiOutput"></select>
+          </label>
+        </div>
+        <label class="check"><input id="stepRecordToggle" type="checkbox"> MIDI step record</label>
+        <label class="check"><input id="clockOutToggle" type="checkbox"> MIDI clock &amp; start/stop out</label>
+        <p class="hint" id="midiClockReadout">Clock idle</p>
+        <p class="hint" id="midiLearnStatus">Click MIDI Learn, then a target, then move a control.</p>
+        <div class="learn-targets" aria-label="MIDI learn targets">
+          <button type="button" data-learn="play">Play</button>
+          <button type="button" data-learn="stop">Stop</button>
+          <button type="button" data-learn="record">Record</button>
+          <button type="button" id="learnMaster" data-learn="master">Master</button>
+          <button type="button" data-learn="bpm">BPM</button>
+          <button type="button" data-learn="kick:volume">Kick</button>
+          <button type="button" data-learn="snare:volume">Snare</button>
+          <button type="button" data-learn="clap:volume">Clap</button>
+          <button type="button" data-learn="hat:volume">Hat</button>
+          <button type="button" data-learn="openhat:volume">Open Hat</button>
+          <button type="button" data-learn="perc:volume">Perc</button>
+          <button type="button" data-learn="bass:volume">808</button>
+          <button type="button" data-learn="chords:volume">Chords</button>
+        </div>
+        <div class="io-split">
+          <div>
+            <h3>Inputs</h3>
+            <ul id="midiInputs" class="midi-list"></ul>
+          </div>
+          <div>
+            <h3>Monitor</h3>
+            <ul id="midiMonitor" class="midi-list"></ul>
+          </div>
+          <div>
+            <h3>Map</h3>
+            <ul id="midiMapList" class="midi-list"></ul>
+          </div>
+        </div>
+      </section>
+      </div>
+    </div>
+  </div>
 
   <div class="paywall-overlay" id="paywallOverlay" role="dialog" aria-modal="true" aria-labelledby="paywallTitle" hidden>
     <div class="paywall-card">

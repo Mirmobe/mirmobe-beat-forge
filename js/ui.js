@@ -9,7 +9,8 @@ import {
   clamp,
   noteNameFromDegree,
   roman,
-  scaleLength
+  scaleLength,
+  trackColor
 } from './theory.js';
 import { getAnalyser, play, stop, syncMix, togglePlay } from './engine.js';
 import { applyBeat, forgeBeat } from './ai.js';
@@ -20,6 +21,10 @@ import { requireFullAccess } from './paywall.js';
 
 let toastTimer = 0;
 let mixPlan = null;
+const hotUntil = new Map();
+const activity = Object.create(null);
+const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+const HOT_MS = reduceMotion ? 280 : 900;
 
 export function initUi() {
   const keySelect = document.getElementById('keySelect');
@@ -145,7 +150,15 @@ export function initUi() {
   });
 
   subscribe((type, detail) => {
-    if (type === 'step') highlight(detail);
+    if (type === 'step') {
+      highlight(detail);
+      if (state.playing && detail >= 0) {
+        state.audioTracks.forEach((track) => {
+          if (audible(track)) markHot(track.id, 0.66);
+        });
+      }
+    }
+    if (type === 'hit' && detail) markHot(detail.id, detail.velocity || 0.85);
     if (type === 'transport') paintTransport();
     if (type === 'pattern') {
       renderGrid();
@@ -157,7 +170,10 @@ export function initUi() {
       renderMixer();
       renderTracks();
     }
-    if (type === 'tracks') renderTracks();
+    if (type === 'tracks') {
+      renderTracks();
+      renderLamps();
+    }
     if (type === 'toast' && detail) showToast(detail);
   });
 
@@ -165,6 +181,7 @@ export function initUi() {
   renderGrid();
   renderMixer();
   renderTracks();
+  renderLamps();
   paintTransport();
   resizeViz();
   window.addEventListener('resize', resizeViz);
@@ -229,11 +246,14 @@ function paintTransport() {
   const record = document.getElementById('recordBtn');
   play.setAttribute('aria-pressed', state.playing ? 'true' : 'false');
   play.classList.toggle('is-on', state.playing);
-  label.textContent = state.playing ? 'Playing' : 'Stopped';
+  label.textContent = state.playing ? 'Playing' : state.recording ? 'Recording' : 'Stopped';
+  document.body.classList.toggle('is-playing', state.playing);
+  document.body.classList.toggle('is-recording', state.recording);
   record.textContent = state.recording ? 'Stop rec' : 'Record';
   record.classList.toggle('is-recording', state.recording);
   record.setAttribute('aria-pressed', state.recording ? 'true' : 'false');
   if (!state.playing) highlight(-1);
+  paintFlags();
 }
 
 function renderGrid() {
@@ -243,9 +263,10 @@ function renderGrid() {
   TRACK_IDS.forEach((id) => {
     const row = document.createElement('div');
     row.className = `track-row track-${id}`;
+    row.dataset.track = id;
     const label = document.createElement('div');
     label.className = 'track-label';
-    label.textContent = TRACK_LABELS[id];
+    label.innerHTML = `<i class="swatch" aria-hidden="true"></i><span>${TRACK_LABELS[id]}</span><span class="lane-meter" aria-hidden="true"><span data-activity="${id}"></span></span>`;
     const steps = document.createElement('div');
     steps.className = 'steps';
     const line = currentPattern()[id];
@@ -262,6 +283,7 @@ function renderGrid() {
     row.append(label, steps);
     root.appendChild(row);
   });
+  paintFlags();
   if (state.currentStep >= 0) highlight(state.currentStep);
 }
 
@@ -307,44 +329,114 @@ function onStepClick(event) {
 }
 
 function highlight(step) {
-  document.querySelectorAll('.step.is-playhead').forEach((el) => el.classList.remove('is-playhead'));
+  document.querySelectorAll('.step.is-playhead').forEach((el) => el.classList.remove('is-playhead', 'is-flash'));
   const readout = document.getElementById('stepReadout');
   if (step == null || step < 0) {
     if (readout) readout.textContent = '–';
     return;
   }
-  document.querySelectorAll(`.step[data-step="${step}"]`).forEach((el) => el.classList.add('is-playhead'));
+  document.querySelectorAll(`.step[data-step="${step}"]`).forEach((el) => {
+    el.classList.add('is-playhead');
+    if (el.classList.contains('is-on')) el.classList.add('is-flash');
+  });
   if (readout) readout.textContent = `${Math.floor(step / 4) + 1}.${(step % 4) + 1}`;
+}
+
+function markHot(id, amount = 0.85) {
+  if (!id) return;
+  hotUntil.set(id, performance.now() + HOT_MS);
+  activity[id] = Math.max(activity[id] || 0, amount);
+  applyHot(id, true);
+}
+
+function applyHot(id, on) {
+  document.querySelectorAll(`[data-track="${CSS.escape(id)}"], [data-channel="${CSS.escape(id)}"], [data-track-id="${CSS.escape(id)}"]`).forEach((el) => {
+    if (el.classList.contains('step')) return;
+    el.classList.toggle('is-hot', on);
+  });
+}
+
+function refreshHot() {
+  const now = performance.now();
+  hotUntil.forEach((until, id) => {
+    const on = now <= until;
+    if (!on) hotUntil.delete(id);
+    applyHot(id, on);
+  });
+  Object.keys(activity).forEach((id) => {
+    activity[id] *= reduceMotion ? 0.7 : 0.93;
+    const width = `${Math.max(0, Math.min(100, Math.round(activity[id] * 100)))}%`;
+    document.querySelectorAll(`[data-activity="${CSS.escape(id)}"]`).forEach((bar) => {
+      bar.style.width = width;
+    });
+  });
+}
+
+function paintFlags() {
+  TRACK_IDS.forEach((id) => {
+    const params = state.mixer[id];
+    const heard = audible(params);
+    document.querySelectorAll(`[data-track="${id}"], [data-channel="${id}"]`).forEach((el) => {
+      if (el.classList.contains('step')) return;
+      el.classList.toggle('is-muted', Boolean(params.mute));
+      el.classList.toggle('is-solo', Boolean(params.solo));
+      el.classList.toggle('is-silent', !heard);
+    });
+  });
+  state.audioTracks.forEach((track) => {
+    const el = document.querySelector(`.audio-track[data-track-id="${track.id}"]`);
+    if (!el) return;
+    el.classList.toggle('is-muted', Boolean(track.mute));
+    el.classList.toggle('is-solo', Boolean(track.solo));
+    el.classList.toggle('is-silent', !audible(track));
+  });
 }
 
 function renderMixer() {
   const root = document.getElementById('mixerStrips');
   root.replaceChildren();
   TRACK_IDS.forEach((id) => root.appendChild(stripView(id, TRACK_LABELS[id], state.mixer[id])));
+  paintFlags();
+}
+
+function renderLamps() {
+  const row = document.getElementById('lampRow');
+  if (!row) return;
+  row.replaceChildren();
+  const items = TRACK_IDS.map((id) => ({ id, label: TRACK_LABELS[id], cls: `track-${id}` }));
+  state.audioTracks.forEach((track) => items.push({ id: track.id, label: track.name, cls: 'track-vocal' }));
+  items.forEach((item) => {
+    const lamp = document.createElement('span');
+    lamp.className = `lamp ${item.cls}`;
+    lamp.dataset.channel = item.id;
+    lamp.textContent = item.label;
+    row.appendChild(lamp);
+  });
 }
 
 function stripView(id, label, params) {
   const row = document.createElement('div');
-  row.className = 'strip';
+  row.className = `strip track-${id}`;
   row.dataset.channel = id;
   row.innerHTML = `
-    <div class="strip-name">${label}</div>
+    <div class="strip-name"><i class="swatch" aria-hidden="true"></i><span>${label}</span><span class="lane-meter" aria-hidden="true"><span data-activity="${id}"></span></span></div>
     <button type="button" class="ms ${params.mute ? 'is-on' : ''}" data-flag="mute" aria-pressed="${params.mute}">M</button>
     <button type="button" class="ms ${params.solo ? 'is-on' : ''}" data-flag="solo" aria-pressed="${params.solo}">S</button>
-    ${slider('Vol', 'volume', params.volume, 0, 1, 0.01)}
-    ${slider('Pan', 'pan', params.pan, -1, 1, 0.01)}
-    ${slider('Lo', 'eqLow', params.eqLow, -12, 12, 0.1)}
-    ${slider('Mid', 'eqMid', params.eqMid, -12, 12, 0.1)}
-    ${slider('Hi', 'eqHigh', params.eqHigh, -12, 12, 0.1)}
-    ${slider('Rev', 'reverb', params.reverb, 0, 1, 0.01)}
-    ${slider('Dly', 'delay', params.delay, 0, 1, 0.01)}
-    ${slider('Drv', 'drive', params.drive, 0, 1, 0.01)}
+    ${slider('Vol', 'volume', params.volume, 0, 1, 0.01, `${id}:volume`)}
+    ${slider('Pan', 'pan', params.pan, -1, 1, 0.01, `${id}:pan`)}
+    ${slider('Lo', 'eqLow', params.eqLow, -12, 12, 0.1, `${id}:eqLow`)}
+    ${slider('Mid', 'eqMid', params.eqMid, -12, 12, 0.1, `${id}:eqMid`)}
+    ${slider('Hi', 'eqHigh', params.eqHigh, -12, 12, 0.1, `${id}:eqHigh`)}
+    ${slider('Rev', 'reverb', params.reverb, 0, 1, 0.01, `${id}:reverb`)}
+    ${slider('Dly', 'delay', params.delay, 0, 1, 0.01, `${id}:delay`)}
+    ${slider('Drv', 'drive', params.drive, 0, 1, 0.01, `${id}:drive`)}
   `;
   return row;
 }
 
-function slider(label, param, value, min, max, step) {
-  return `<label class="fader">${label}<input type="range" data-param="${param}" min="${min}" max="${max}" step="${step}" value="${value}"></label>`;
+function slider(label, param, value, min, max, step, learn) {
+  const learnAttr = learn ? ` data-learn="${learn}"` : '';
+  return `<label class="fader">${label}<input type="range" data-param="${param}"${learnAttr} min="${min}" max="${max}" step="${step}" value="${value}"></label>`;
 }
 
 function onMixerInput(event) {
@@ -364,6 +456,7 @@ function onMixerClick(event) {
   event.target.classList.toggle('is-on', params[flag]);
   event.target.setAttribute('aria-pressed', params[flag] ? 'true' : 'false');
   syncMix();
+  paintFlags();
 }
 
 async function onGenerate() {
@@ -408,16 +501,19 @@ function renderTracks() {
     empty.className = 'hint';
     empty.textContent = 'No audio tracks yet. Add the demo loop, import a file, or record over the beat.';
     root.appendChild(empty);
+    renderLamps();
     return;
   }
   state.audioTracks.forEach((track) => {
     const card = document.createElement('article');
-    card.className = 'audio-track';
+    card.className = 'audio-track track-vocal';
     card.dataset.trackId = track.id;
     const heard = audible(track);
     card.innerHTML = `
       <div class="audio-top">
+        <i class="swatch" aria-hidden="true"></i>
         <strong>${escapeHtml(track.name)}</strong>
+        <span class="lane-meter" aria-hidden="true"><span data-activity="${track.id}"></span></span>
         <span class="role">${track.role}</span>
         <button type="button" class="ms ${track.mute ? 'is-on' : ''}" data-flag="mute">M</button>
         <button type="button" class="ms ${track.solo ? 'is-on' : ''}" data-flag="solo">S</button>
@@ -425,7 +521,7 @@ function renderTracks() {
       </div>
       <canvas class="wave" width="320" height="36" aria-hidden="true"></canvas>
       <div class="audio-controls">
-        ${slider('Vol', 'volume', track.volume, 0, 1, 0.01)}
+        ${slider('Vol', 'volume', track.volume, 0, 1, 0.01, `${track.id}:volume`)}
         ${slider('Nudge', 'nudgeMs', track.nudgeMs, -150, 150, 1)}
         ${slider('Trim in', 'trimStart', track.trimStart, 0, Math.max(0.1, track.buffer.duration), 0.01)}
         ${slider('Trim out', 'trimEnd', track.trimEnd, 0, Math.max(0.1, track.buffer.duration), 0.01)}
@@ -435,6 +531,8 @@ function renderTracks() {
     drawWaveform(card.querySelector('canvas'), track.buffer);
     root.appendChild(card);
   });
+  paintFlags();
+  renderLamps();
 }
 
 function onTrackInput(event) {
@@ -516,8 +614,13 @@ function drawWaveform(canvas, buffer) {
   const ctx = canvas.getContext('2d');
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.clearRect(0, 0, width, height);
-  ctx.strokeStyle = '#e0a44a';
-  ctx.lineWidth = 1;
+  const gradient = ctx.createLinearGradient(0, 0, width, 0);
+  gradient.addColorStop(0, '#ff2d55');
+  gradient.addColorStop(0.28, '#ffc43d');
+  gradient.addColorStop(0.55, '#3ad6ff');
+  gradient.addColorStop(1, '#ff3db8');
+  ctx.strokeStyle = gradient;
+  ctx.lineWidth = 1.4;
   const data = buffer.getChannelData(0);
   const step = Math.max(1, Math.floor(data.length / width));
   ctx.beginPath();
@@ -553,6 +656,7 @@ function resizeViz() {
 
 function drawViz() {
   requestAnimationFrame(drawViz);
+  refreshHot();
   const canvas = viz();
   if (!canvas) return;
   const ctx = canvas.getContext('2d');
@@ -561,44 +665,60 @@ function drawViz() {
   const height = canvas.height / dpr;
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.clearRect(0, 0, width, height);
-  ctx.fillStyle = '#100e0b';
+  ctx.fillStyle = '#07060c';
   ctx.fillRect(0, 0, width, height);
   const analyser = getAnalyser();
-  if (!analyser) {
-    ctx.strokeStyle = 'rgba(224,164,74,0.45)';
-    ctx.beginPath();
-    ctx.moveTo(0, height * 0.5);
-    for (let x = 0; x <= width; x += 8) {
-      ctx.lineTo(x, height * 0.5 + Math.sin(x / 18) * 6);
-    }
-    ctx.stroke();
-    return;
-  }
-  if (!vizFreq || vizFreq.length !== analyser.frequencyBinCount) {
-    vizFreq = new Uint8Array(analyser.frequencyBinCount);
-    vizWave = new Uint8Array(analyser.fftSize);
-  }
-  analyser.getByteFrequencyData(vizFreq);
-  analyser.getByteTimeDomainData(vizWave);
-  const bars = 42;
+  const bars = 48;
   const gap = 2;
   const barWidth = (width - gap * bars) / bars;
+  const playing = state.playing || state.recording;
+  if (analyser) {
+    if (!vizFreq || vizFreq.length !== analyser.frequencyBinCount) {
+      vizFreq = new Uint8Array(analyser.frequencyBinCount);
+      vizWave = new Uint8Array(analyser.fftSize);
+    }
+    analyser.getByteFrequencyData(vizFreq);
+    analyser.getByteTimeDomainData(vizWave);
+  }
   for (let i = 0; i < bars; i += 1) {
-    const index = Math.floor((i / bars) ** 1.4 * (vizFreq.length * 0.72));
-    const mag = vizFreq[index] / 255;
-    const barHeight = Math.max(2, mag * (height - 16));
-    ctx.fillStyle = i % 5 === 0 ? '#f3d7a1' : '#e0a44a';
-    ctx.fillRect(i * (barWidth + gap) + 4, height - 8 - barHeight, barWidth, barHeight);
+    const hue = Math.round((i / bars) * 310);
+    let mag = 0.08 + 0.06 * Math.sin((performance.now() / 420) + i * 0.45);
+    if (analyser && vizFreq) {
+      const index = Math.floor((i / bars) ** 1.35 * (vizFreq.length * 0.7));
+      mag = Math.max(mag * 0.35, vizFreq[index] / 255);
+    }
+    const barHeight = Math.max(2, mag * (height - 22));
+    ctx.fillStyle = `hsl(${hue} 92% ${playing ? 62 : 48}%)`;
+    ctx.shadowColor = `hsl(${hue} 100% 60%)`;
+    ctx.shadowBlur = reduceMotion || !playing ? 0 : 8;
+    ctx.fillRect(i * (barWidth + gap) + 2, height - 8 - barHeight, Math.max(1, barWidth), barHeight);
   }
-  ctx.strokeStyle = 'rgba(243,215,161,0.7)';
-  ctx.beginPath();
-  for (let i = 0; i < vizWave.length; i += 8) {
-    const x = (i / vizWave.length) * width;
-    const y = (vizWave[i] / 255) * height;
-    if (i === 0) ctx.moveTo(x, y);
-    else ctx.lineTo(x, y);
+  ctx.shadowBlur = 0;
+  const lamps = [...TRACK_IDS, ...state.audioTracks.map((track) => track.id)];
+  lamps.forEach((id, index) => {
+    const level = activity[id] || 0;
+    const x = 16 + index * Math.min(36, (width - 20) / Math.max(1, lamps.length));
+    const y = 14;
+    ctx.beginPath();
+    ctx.strokeStyle = trackColor(id);
+    ctx.globalAlpha = 0.35 + level * 0.65;
+    ctx.lineWidth = 2;
+    ctx.arc(x, y, 5 + (reduceMotion ? 0 : level * 7), 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+  });
+  if (analyser && vizWave) {
+    ctx.beginPath();
+    ctx.lineWidth = 1.4;
+    ctx.strokeStyle = 'rgba(255,255,255,0.78)';
+    for (let i = 0; i < vizWave.length; i += 8) {
+      const x = (i / vizWave.length) * width;
+      const y = (vizWave[i] / 255) * height;
+      if (i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    }
+    ctx.stroke();
   }
-  ctx.stroke();
 }
 
 function escapeHtml(value) {
