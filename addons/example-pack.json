@@ -1,0 +1,52 @@
+{
+  "format": "mirmobe-beat-forge-pack",
+  "version": 1,
+  "title": "Night Market",
+  "addons": [
+    {
+      "id": "night-market",
+      "name": "Night Market Keys",
+      "kind": "preset-pack",
+      "presets": [
+        {
+          "id": "night-market-keys",
+          "name": "Night Market",
+          "bpm": 102,
+          "swing": 0.14,
+          "key": "D",
+          "scale": "dorian",
+          "steps": 16,
+          "sidechain": 0.3,
+          "patterns": {
+            "kick": [1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0],
+            "snare": [0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0],
+            "clap": [0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0],
+            "hat": [1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0],
+            "openhat": [0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0],
+            "perc": [0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0],
+            "bass": [1, 0, 0, 5, 0, 0, 1, 0, 4, 0, 0, 0, 5, 0, 0, 0],
+            "chords": [1, 0, 0, 0, 0, 0, 0, 0, 4, 0, 0, 0, 0, 0, 0, 0]
+          }
+        }
+      ]
+    },
+    {
+      "id": "night-market-air",
+      "name": "Night Market Air",
+      "kind": "vocal-chains",
+      "chains": [
+        {
+          "id": "night-air",
+          "name": "Night Air",
+          "eqLow": -3,
+          "eqMid": 1,
+          "eqHigh": 3,
+          "reverb": 0.3,
+          "delay": 0.18,
+          "drive": 0.05,
+          "volume": 0.8
+        }
+      ]
+    }
+  ]
+}
